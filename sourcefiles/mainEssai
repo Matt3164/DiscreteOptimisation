@@ -1,0 +1,179 @@
+/*
+ * main.cpp
+ *
+ *  Created on: 9 mars 2014
+ *      Author: matthieulegoff
+ */
+
+
+#include <iostream>
+#include "graph.h"
+#include <limits>
+#include <cv.h>
+#include <highgui.h>
+#include <strstream>
+#include "StereoGraph.h"
+
+using namespace cv;
+
+int Norme1(Vec3b X, Vec3b Y){
+	int sum = 0;
+
+	for(int i = 0; i<3;i++){
+		sum+= abs((int) X[0] - (int) Y[0]);
+	}
+	return sum;
+}
+
+int main(int argc, char** argv){
+
+	std::cout << "Test des fichiers sources de Max Flow-Min Cut" << std::endl;
+
+	Mat imageLeft = imread(argv[1]);
+
+	Mat imageRight = imread(argv[2]);
+
+
+
+	int DeltaI = 5;
+	int lambdaedge = 10;
+	int lambdanonedge = 20;
+	const int dmax = 15;
+
+	std::cout << "Lecture de l'image de gauche : " << imageLeft.rows << " * " << imageLeft.cols << std::endl;
+	std::cout << "Lecture de l'image de droite : " << imageRight.rows << " * " << imageRight.cols << std::endl;
+	Vec3b intensity = imageLeft.at<Vec3b>(23, 100);
+	uchar blue = intensity.val[0];
+	uchar green = intensity.val[1];
+	uchar red = intensity.val[2];
+	std::cout << "Test de format : Rouge : " << (int) red << " Blue : " << (int) blue << " Green : " << (int) green << std::endl;
+	Vec3b intensity2 = imageLeft.at<Vec3b>(72, 55);
+	std::cout << "Test de la norme 1 : " << Norme1(intensity, intensity2) << std::endl;
+
+	/*for(int DeltaI = 4; DeltaI < 20; DeltaI+=2){
+		for(int lambdaedge = 2; lambdaedge < 7; lambdaedge+=1){
+			for(int lambdanonedge = 5; lambdanonedge < 31; lambdanonedge+=5){*/
+
+				Mat Disparity(imageLeft.rows,imageLeft.cols, CV_8UC1, Scalar(0));
+
+
+				std::cout << "Demarrage de la procedure : " << std::endl;
+
+				typedef Graph <int, int ,int> GraphType;
+
+				GraphType * g = new GraphType(imageLeft.rows * imageLeft.cols*(dmax+1),4*imageLeft.rows * imageLeft.cols*(dmax+1));
+
+				for(int d = 0; d <= dmax; d++){
+					for (int i = 0; i<imageLeft.rows;i++){
+						for(int j = 0; j < imageLeft.cols; j++){
+
+							g -> add_node();
+						}
+					}
+				}
+
+				std::cout << "Initialisation du graphe : [OK]" << std::endl;
+
+				for(int d=0; d <= dmax;d++){
+
+					for (int i = 0; i<imageLeft.rows;i++){
+						for(int j = 0; j < imageLeft.cols; j++){
+
+							switch(d){
+							case 0:{
+								int diff = Norme1(imageLeft.at<uchar>(j, i), imageRight.at<uchar>(j, i));
+								g -> add_tweights(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols ,diff,0);
+								break;}
+							case dmax:{
+								g -> add_tweights(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols ,0,std::numeric_limits<int>::max());
+								break;}
+							default:{
+								g -> add_tweights(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols ,0,0);
+								break;}
+							}
+
+							int w1 = 0;
+							int w2 = 0;
+
+							if(i < imageLeft.rows -1){
+								if(j < imageRight.cols-1){
+									if(Norme1(imageLeft.at<uchar>(j, i), imageLeft.at<uchar>(j,i+1)) > DeltaI  ){
+										w1 = lambdaedge;
+									}else{w1 = lambdanonedge;
+									}
+
+									if(Norme1(imageLeft.at<uchar>(j, i), imageLeft.at<uchar>(j+1, i)) > DeltaI  ){
+											w2 = lambdaedge;
+									}else{w2 = lambdanonedge;
+									}
+
+									g -> add_edge(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , (i+1)*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , w1,w1);
+									g -> add_edge(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , i*imageLeft.rows + j + 1 + d* imageLeft.rows * imageLeft.cols , w2,w2);
+								}else{
+									if(Norme1(imageLeft.at<uchar>(j, i), imageLeft.at<uchar>(j, i+1)) > DeltaI  ){
+										w1 = lambdaedge;
+									}else{w1 = lambdanonedge;
+									}
+									g -> add_edge(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , (i+1)*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , w1,w1);
+								}
+							}else{
+								if(j < imageRight.cols-1){
+									if(Norme1(imageLeft.at<uchar>(j, i), imageLeft.at<uchar>(j, i+1)) > DeltaI  ){
+										w2 = lambdaedge;
+									}else{w2 = lambdanonedge;
+									}
+									g -> add_edge(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , i*imageLeft.rows + j + 1 + d* imageLeft.rows * imageLeft.cols , w2,w2);
+								}
+							}
+
+							int diff = Norme1(imageLeft.at<uchar>(j, i), imageRight.at<uchar>(j, i-d-1));
+							if(d < dmax){
+								g -> add_edge(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols , i*imageLeft.rows + j + (d + 1)* imageLeft.rows * imageLeft.cols , diff,diff);
+							}
+						}
+					}
+				}
+
+				std::cout << "Creation du reseau : [OK] " << std::endl;
+
+				int flow = g -> maxflow();
+
+				std::cout << "Le flux maximum est de : " << flow << std::endl;
+				std::cout << "Calcul du flux : [OK] " << std::endl;
+
+				for(int i = 0; i < imageLeft.rows; i++){
+
+					for(int j = 0; j < imageLeft.cols; j++){
+
+						int d = 0;
+						while(g -> what_segment(i*imageLeft.rows + j + d* imageLeft.rows * imageLeft.cols) == GraphType::SOURCE && d <= dmax){
+							d++;
+						}
+
+						Disparity.at<uchar>(j,i) = 16 * d;
+
+					}
+				}
+
+				std::stringstream ss;
+				ss << "images/Res-d" << DeltaI << "-le" << lambdaedge << "-lne"<< lambdanonedge << ".bmp";
+				std::cout << ss.str() << std::endl;
+				imwrite( ss.str(), Disparity );
+
+				//imwrite("Disparity.bmp", Disparity);
+				std::cout << "Creation de l'image : [OK ]" << std::endl;
+
+			/*}
+		}
+	}*/
+
+	StereoGraph* StereoGr = new StereoGraph;
+	StereoGr -> LoadImage(imageLeft,0);
+	StereoGr -> LoadImage(imageRight,1);
+	StereoGr -> UpdateGraph();
+	StereoGr -> CreateGraph();
+	StereoGr -> Initialize();
+	StereoGr -> Update();
+	std::cout << "RŽsultat : le flow est de : " << StereoGr -> Solve() << std::endl;
+}
+
